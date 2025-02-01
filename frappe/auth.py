@@ -131,7 +131,7 @@ class LoginManager:
 		# clear cache
 		frappe.clear_cache(user=frappe.form_dict.get("usr"))
 		action = ""
-		action = frappe.form_dict.get("act")
+		# action = frappe.form_dict.get("act")
 		user, pwd = get_cached_user_pass()
 		self.authenticate(user=user, pwd=pwd)
 		if action == "app-user":
