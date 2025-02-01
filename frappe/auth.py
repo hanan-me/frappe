@@ -133,7 +133,7 @@ class LoginManager:
 		action = ""
 		action = frappe.form_dict.get("act")
 		user, pwd = get_cached_user_pass()
-		self.authenticate(user=user, pwd=pwd, action=action)
+		self.authenticate(user=user, pwd=pwd)
 		if action == "app-user":
 			app_user = frappe.get_doc("App User", user)
 			if app_user:
