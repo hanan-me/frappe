@@ -130,17 +130,8 @@ class LoginManager:
 
 		# clear cache
 		frappe.clear_cache(user=frappe.form_dict.get("usr"))
-		action = ""
-		# action = frappe.form_dict.get("act")
 		user, pwd = get_cached_user_pass()
 		self.authenticate(user=user, pwd=pwd)
-		if action == "app-user":
-			app_user = frappe.get_doc("App User", "zeeshan.afzal@gmail.com")
-			if app_user:
-				frappe.response["keys"] = {
-                    "api_key": app_user.api_key,
-                    "api_secret": app_user.api_secret
-                }
 		if self.force_user_to_reset_password():
 			doc = frappe.get_doc("User", self.user)
 			frappe.local.response["redirect_to"] = doc.reset_password(send_email=False, password_expired=True)
@@ -275,6 +266,17 @@ class LoginManager:
 		# Current login flow uses cached credentials for authentication while checking OTP.
 		# Incase of OTP check, tracker for auth needs to be disabled(If not, it can remove tracker history as it is going to succeed anyway)
 		# Tracker is activated for 2FA incase of OTP.
+
+		action = ""
+		action = frappe.form_dict.get("act")
+		if action == "app-user":
+			app_user = frappe.get_doc("App User", "zeeshan.afzal@gmail.com")
+			if app_user:
+				frappe.local.response["message"] = {
+                    "api_key": app_user.api_key,
+                    "api_secret": app_user.api_secret
+                }
+		
 		ignore_tracker = should_run_2fa(user.name) and ("otp" in frappe.form_dict)
 		user_tracker = None if ignore_tracker else get_login_attempt_tracker(user.name)
 
