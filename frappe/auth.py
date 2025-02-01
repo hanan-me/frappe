@@ -223,6 +223,28 @@ class LoginManager:
 
 		clear_sessions(frappe.session.user, keep_current=True)
 
+	def custom_login(usr, pwd, action=None):
+	    if not usr or not pwd:
+	        frappe.throw(_("Username and password required"), frappe.AuthenticationError)
+	
+	    # Authenticate user
+	    user_doc = frappe.get_doc("User", usr)
+	    if not user_doc:
+	        frappe.throw(_("Invalid user"), frappe.AuthenticationError)
+	
+	    check_password(usr, pwd)  # Validate password
+	
+	    if action == "flutter_login":
+	        # Fetch API Key and Secret from Custom Doctype
+	        custom_doc = frappe.get_value("App User", {"email": usr}, ["api_key", "api_secret"])
+	        if not custom_doc:
+	            frappe.throw(_("API Key and Secret not found"), frappe.AuthenticationError)
+	        
+	        api_key, api_secret = custom_doc
+	        return {"api_key": api_key, "api_secret": api_secret}
+	
+	    return {"message": "Login successful"}
+	
 	def authenticate(self, user: str | None = None, pwd: str | None = None):
 		from frappe.core.doctype.user.user import User
 
