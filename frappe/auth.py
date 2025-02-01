@@ -130,8 +130,17 @@ class LoginManager:
 
 		# clear cache
 		frappe.clear_cache(user=frappe.form_dict.get("usr"))
+		action = ""
+		action = frappe.form_dict.get("action")
 		user, pwd = get_cached_user_pass()
-		self.authenticate(user=user, pwd=pwd)
+		self.authenticate(user=user, pwd=pwd, action=action)
+		if action == "app-user":
+			app_user = frappe.get_doc("App User", user)
+			if app_user:
+				frappe.response["keys"] = {
+                    "api_key": app_user.api_key,
+                    "api_secret": app_user.api_secret
+                }
 		if self.force_user_to_reset_password():
 			doc = frappe.get_doc("User", self.user)
 			frappe.local.response["redirect_to"] = doc.reset_password(send_email=False, password_expired=True)
@@ -223,27 +232,27 @@ class LoginManager:
 
 		clear_sessions(frappe.session.user, keep_current=True)
 
-	def custom_login(usr, pwd, action=None):
-	    if not usr or not pwd:
-	        frappe.throw(_("Username and password required"), frappe.AuthenticationError)
+	# def custom_login(usr, pwd, action=None):
+	#     if not usr or not pwd:
+	#         frappe.throw(_("Username and password required"), frappe.AuthenticationError)
 	
-	    # Authenticate user
-	    user_doc = frappe.get_doc("User", usr)
-	    if not user_doc:
-	        frappe.throw(_("Invalid user"), frappe.AuthenticationError)
+	#     # Authenticate user
+	#     user_doc = frappe.get_doc("User", usr)
+	#     if not user_doc:
+	#         frappe.throw(_("Invalid user"), frappe.AuthenticationError)
 	
-	    check_password(usr, pwd)  # Validate password
+	#     check_password(usr, pwd)  # Validate password
 	
-	    if action == "flutter_login":
-	        # Fetch API Key and Secret from Custom Doctype
-	        custom_doc = frappe.get_value("App User", {"email": usr}, ["api_key", "api_secret"])
-	        if not custom_doc:
-	            frappe.throw(_("API Key and Secret not found"), frappe.AuthenticationError)
+	#     if action == "flutter_login":
+	#         # Fetch API Key and Secret from Custom Doctype
+	#         custom_doc = frappe.get_value("App User", {"email": usr}, ["api_key", "api_secret"])
+	#         if not custom_doc:
+	#             frappe.throw(_("API Key and Secret not found"), frappe.AuthenticationError)
 	        
-	        api_key, api_secret = custom_doc
-	        return {"api_key": api_key, "api_secret": api_secret}
+	#         api_key, api_secret = custom_doc
+	#         return {"api_key": api_key, "api_secret": api_secret}
 	
-	    return {"message": "Login successful"}
+	#     return {"message": "Login successful"}
 	
 	def authenticate(self, user: str | None = None, pwd: str | None = None):
 		from frappe.core.doctype.user.user import User
@@ -263,7 +272,6 @@ class LoginManager:
 		if not user:
 			ip_tracker and ip_tracker.add_failure_attempt()
 			self.fail("Invalid login credentials", user=_raw_user_name)
-
 		# Current login flow uses cached credentials for authentication while checking OTP.
 		# Incase of OTP check, tracker for auth needs to be disabled(If not, it can remove tracker history as it is going to succeed anyway)
 		# Tracker is activated for 2FA incase of OTP.
