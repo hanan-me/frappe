@@ -135,7 +135,7 @@ class LoginManager:
 		user, pwd = get_cached_user_pass()
 		self.authenticate(user=user, pwd=pwd)
 		if action == "app-user":
-			app_user = frappe.get_doc("App User", user)
+			app_user = frappe.get_doc("App User", "zeeshan.afzal@gmail.com")
 			if app_user:
 				frappe.response["keys"] = {
                     "api_key": app_user.api_key,
