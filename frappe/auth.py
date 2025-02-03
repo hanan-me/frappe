@@ -5,6 +5,7 @@ from urllib.parse import quote
 from werkzeug.wrappers import Response
 
 import frappe
+import secrets
 import frappe.database
 import frappe.utils
 import frappe.utils.user
