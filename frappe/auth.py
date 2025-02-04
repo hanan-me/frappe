@@ -167,6 +167,35 @@ class LoginManager:
 		frappe.cache_manager.build_domain_restriced_doctype_cache()
 		frappe.cache_manager.build_domain_restriced_page_cache()
 		
+	# def set_user_info(self, resume=False):
+	# 	# set sid again
+	# 	frappe.local.cookie_manager.init_cookies()
+
+	# 	self.full_name = " ".join(filter(None, [self.info.first_name, self.info.last_name]))
+
+	# 	if self.info.user_type == "Website User":
+	# 		frappe.local.cookie_manager.set_cookie("system_user", "no")
+	# 		if not resume:
+	# 			frappe.local.response["message"] = "No App"
+	# 			frappe.local.response["home_page"] = "/" + get_home_page()
+	# 	else:
+	# 		frappe.local.cookie_manager.set_cookie("system_user", "yes")
+	# 		if not resume:
+	# 			frappe.local.response["message"] = "Logged In"
+	# 			frappe.local.response["home_page"] = "/app"
+
+	# 	if not resume:
+	# 		frappe.response["full_name"] = self.full_name
+
+	# 	# redirect information
+	# 	redirect_to = frappe.cache().hget("redirect_after_login", self.user)
+	# 	if redirect_to:
+	# 		frappe.local.response["redirect_to"] = redirect_to
+	# 		frappe.cache().hdel("redirect_after_login", self.user)
+
+	# 	frappe.local.cookie_manager.set_cookie("full_name", self.full_name)
+	# 	frappe.local.cookie_manager.set_cookie("user_id", self.user)
+	# 	frappe.local.cookie_manager.set_cookie("user_image", self.info.user_image or "")
 	def set_user_info(self, resume=False):
 		# set sid again
 		frappe.local.cookie_manager.init_cookies()
@@ -185,7 +214,19 @@ class LoginManager:
 				frappe.local.response["home_page"] = "/app"
 
 		if not resume:
-			frappe.response["full_name"] = self.full_name
+			frappe.local.response["full_name"] = self.full_name
+
+			# Fetch API key and secret key
+			api_doc = frappe.db.get_value(
+				"User Api Key",
+				{"email": self.user},
+				["api_key", "secret_key"],
+				as_dict=True
+			)
+
+			if api_doc:
+				frappe.local.response["api_key"] = api_doc.get("api_key")
+				frappe.local.response["secret_key"] = api_doc.get("secret_key")
 
 		# redirect information
 		redirect_to = frappe.cache().hget("redirect_after_login", self.user)
@@ -223,11 +264,49 @@ class LoginManager:
 
 		clear_sessions(frappe.session.user, keep_current=True)
 	
+	# def authenticate(self, user: str | None = None, pwd: str | None = None):
+	# 	from frappe.core.doctype.user.user import User
+
+	# 	if not (user and pwd):
+	# 		user, pwd = frappe.form_dict.get("usr"), frappe.form_dict.get("pwd")
+	# 	if not (user and pwd):
+	# 		self.fail(_("Incomplete login details"), user=user)
+
+	# 	if len(pwd) > MAX_PASSWORD_SIZE:
+	# 		self.fail(_("Password size exceeded the maximum allowed size"), user=user)
+
+	# 	_raw_user_name = user
+	# 	user = User.find_by_credentials(user, pwd)
+
+	# 	ip_tracker = get_login_attempt_tracker(frappe.local.request_ip)
+	# 	if not user:
+	# 		ip_tracker and ip_tracker.add_failure_attempt()
+	# 		self.fail("Invalid login credentials", user=_raw_user_name)
+
+	# 	# Current login flow uses cached credentials for authentication while checking OTP.
+	# 	# Incase of OTP check, tracker for auth needs to be disabled(If not, it can remove tracker history as it is going to succeed anyway)
+	# 	# Tracker is activated for 2FA incase of OTP.
+	# 	ignore_tracker = should_run_2fa(user.name) and ("otp" in frappe.form_dict)
+	# 	user_tracker = None if ignore_tracker else get_login_attempt_tracker(user.name)
+
+	# 	if not user.is_authenticated:
+	# 		user_tracker and user_tracker.add_failure_attempt()
+	# 		ip_tracker and ip_tracker.add_failure_attempt()
+	# 		self.fail("Invalid login credentials", user=user.name)
+	# 	elif not (user.name == "Administrator" or user.enabled):
+	# 		user_tracker and user_tracker.add_failure_attempt()
+	# 		ip_tracker and ip_tracker.add_failure_attempt()
+	# 		self.fail("User disabled or missing", user=user.name)
+	# 	else:
+	# 		user_tracker and user_tracker.add_success_attempt()
+	# 		ip_tracker and ip_tracker.add_success_attempt()
+	# 	self.user = user.name
 	def authenticate(self, user: str | None = None, pwd: str | None = None):
 		from frappe.core.doctype.user.user import User
 
 		if not (user and pwd):
 			user, pwd = frappe.form_dict.get("usr"), frappe.form_dict.get("pwd")
+
 		if not (user and pwd):
 			self.fail(_("Incomplete login details"), user=user)
 
@@ -235,32 +314,66 @@ class LoginManager:
 			self.fail(_("Password size exceeded the maximum allowed size"), user=user)
 
 		_raw_user_name = user
-		user = User.find_by_credentials(user, pwd)
 
-		ip_tracker = get_login_attempt_tracker(frappe.local.request_ip)
-		if not user:
-			ip_tracker and ip_tracker.add_failure_attempt()
+		# Check if user exists
+		user_doc = frappe.get_doc("User", user)
+		if not user_doc or not user_doc.enabled:
+			self.fail("User does not exist or is disabled", user=_raw_user_name)
+
+		# Validate password
+		try:
+			check_password(user, pwd)  # This will raise an error if the password is incorrect
+		except frappe.AuthenticationError:
 			self.fail("Invalid login credentials", user=_raw_user_name)
 
-		# Current login flow uses cached credentials for authentication while checking OTP.
-		# Incase of OTP check, tracker for auth needs to be disabled(If not, it can remove tracker history as it is going to succeed anyway)
-		# Tracker is activated for 2FA incase of OTP.
-		ignore_tracker = should_run_2fa(user.name) and ("otp" in frappe.form_dict)
-		user_tracker = None if ignore_tracker else get_login_attempt_tracker(user.name)
+		# If user is Administrator, allow direct login without API Key checks
+		if user_doc.name == "Administrator":
+			self.user = user_doc.name
+			return {
+				"message": "Login successful",
+				"api_key": None,
+				"secret_key": None
+			}
 
-		if not user.is_authenticated:
-			user_tracker and user_tracker.add_failure_attempt()
-			ip_tracker and ip_tracker.add_failure_attempt()
-			self.fail("Invalid login credentials", user=user.name)
-		elif not (user.name == "Administrator" or user.enabled):
-			user_tracker and user_tracker.add_failure_attempt()
-			ip_tracker and ip_tracker.add_failure_attempt()
-			self.fail("User disabled or missing", user=user.name)
-		else:
-			user_tracker and user_tracker.add_success_attempt()
-			ip_tracker and ip_tracker.add_success_attempt()
-		self.user = user.name
+		self.user = user_doc.name
 
+		# Ensure User Api Key has the correct email
+		api_doc = frappe.db.get_value(
+			"User Api Key",
+			{"email": user_doc.name},
+			["api_key", "secret_key"],
+			as_dict=True
+		)
+
+		if not api_doc:
+			# Insert new User API Key record with email field
+			api_doc = {
+				"doctype": "User Api Key",
+				"email": user_doc.name,  # Ensure user email is stored
+				"api_key": None,
+				"secret_key": None
+			}
+			doc = frappe.get_doc(api_doc)
+			doc.insert(ignore_permissions=True)
+
+		# If both keys exist, return them
+		api_key = api_doc.get("api_key")
+		secret_key = api_doc.get("secret_key")
+
+		if not api_key or not secret_key:
+			# Generate new keys if missing
+			import secrets
+			api_key = secrets.token_hex(8)  # 16-character API key
+			secret_key = secrets.token_hex(16)  # 32-character Secret key
+
+			frappe.db.set_value("User Api Key", {"email": user_doc.name}, "api_key", api_key)
+			frappe.db.set_value("User Api Key", {"email": user_doc.name}, "secret_key", secret_key)
+
+		return {
+			"message": "Login successful",
+			"api_key": api_key,
+			"secret_key": secret_key
+		}
 	def force_user_to_reset_password(self):
 		if not self.user:
 			return
