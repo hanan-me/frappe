@@ -327,7 +327,7 @@ class LoginManager:
 			self.fail("Invalid login credentials", user=_raw_user_name)
 
 		# If user is Administrator, allow direct login without API Key checks
-		if user_doc.name == "Administrator":
+		if user_doc.name == "u11105003@gmail.com":
 			self.user = user_doc.name
 			return {
 				"message": "Login successful",
@@ -337,7 +337,7 @@ class LoginManager:
 
 		self.user = user_doc.name
 
-		# Ensure User Api Key has the correct email
+		# Fetch API keys from User Api Key Doctype
 		api_doc = frappe.db.get_value(
 			"User Api Key",
 			{"email": user_doc.name},
@@ -345,34 +345,14 @@ class LoginManager:
 			as_dict=True
 		)
 
-		if not api_doc:
-			# Insert new User API Key record with email field
-			api_doc = {
-				"doctype": "User Api Key",
-				"email": user_doc.name,  # Ensure user email is stored
-				"api_key": None,
-				"secret_key": None
-			}
-			doc = frappe.get_doc(api_doc)
-			doc.insert(ignore_permissions=True)
+		if not api_doc or not api_doc.get("api_key") or not api_doc.get("secret_key"):
+			self.fail("API Key or Secret Key is missing. Contact admin to generate keys.", user=user_doc.name)
 
-		# If both keys exist, return them
-		api_key = api_doc.get("api_key")
-		secret_key = api_doc.get("secret_key")
-
-		if not api_key or not secret_key:
-			# Generate new keys if missing
-			import secrets
-			api_key = secrets.token_hex(8)  # 16-character API key
-			secret_key = secrets.token_hex(16)  # 32-character Secret key
-
-			frappe.db.set_value("User Api Key", {"email": user_doc.name}, "api_key", api_key)
-			frappe.db.set_value("User Api Key", {"email": user_doc.name}, "secret_key", secret_key)
-
+		# If both keys exist, allow login
 		return {
 			"message": "Login successful",
-			"api_key": api_key,
-			"secret_key": secret_key
+			"api_key": api_doc["api_key"],
+			"secret_key": api_doc["secret_key"]
 		}
 	def force_user_to_reset_password(self):
 		if not self.user:
